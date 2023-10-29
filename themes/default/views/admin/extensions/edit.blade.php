@@ -3,7 +3,7 @@
         {{ __('Edit') }}
     </x-slot>
 
-    <div class="mt-8 text-2xl dark:text-darkmodetext">
+    <div class="text-2xl dark:text-darkmodetext">
         <p>
             {{ __('Edit') }} {{ $extension->name }}
         </p>

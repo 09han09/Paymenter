@@ -14,7 +14,7 @@
                 </div>
             @endforeach
         </div>
-        <button type="submit" class="button button-primary">
+        <button type="submit" class="mt-4 button button-primary">
             {{ __('Save') }}
         </button>
     </form>
