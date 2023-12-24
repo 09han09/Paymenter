@@ -6,12 +6,14 @@ use App\Helpers\ExtensionHelper;
 use App\Helpers\NotificationHelper;
 use App\Jobs\Servers\CreateServer;
 use App\Models\Coupon;
+use App\Models\Extension;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Order;
 use App\Models\OrderProduct;
 use App\Models\OrderProductConfig;
 use App\Models\Product;
+use App\Models\TaxRate;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
@@ -38,6 +40,8 @@ class Index extends Component
 
     public $discount;
 
+    public $gateways;
+
     protected $casts = [
         'products' => 'collection',
     ];
@@ -59,6 +63,10 @@ class Index extends Component
         $this->coupon = $coupon;
 
         $this->products;
+
+        $this->gateways = ExtensionHelper::getAvailableGateways($this->total, $this->products);
+
+        if(!isset($this->payment_method) || !in_array($this->payment_method, $this->gateways->pluck('id')->toArray())) $this->payment_method = $this->gateways->first()->id ?? null;
     }
 
     #[Computed()]
@@ -72,6 +80,8 @@ class Index extends Component
         if ($cart) {
             foreach ($cart as $product2) {
                 $product = Product::where('id', $product2['product_id'])->first();
+                $product->config = $product2['config'] ?? [];
+                $product->configurableOptions = $product2['configurableOptions'] ?? [];
                 $product->quantity = $product2['quantity'];
                 $product->price = isset($product2['billing_cycle']) ? $product->prices()->get()->first()->{$product2['billing_cycle']} : $product->prices()->get()->first()->monthly;
                 $product->billing_cycle = $product2['billing_cycle'] ?? null;
@@ -111,6 +121,15 @@ class Index extends Component
                 if ($product->discount_fee > $product->setup_fee) {
                     $product->discount_fee = $product->setup_fee;
                 }
+                $price = $this->calculateTax($product->price * $product->quantity - $product->discount);
+                $setupFee = $this->calculateTax($product->setup_fee * $product->quantity - $product->discount_fee);
+                if (config('settings::tax_type') == 'exclusive') {
+                    $total += $price;
+                    $totalSetup += $setupFee;
+                }
+                $product->tax = $price;
+                $product->taxSetup = $setupFee;
+                $this->tax->amount ?? $this->tax->amount += $price + $setupFee;
                 $discount += ($product->discount + $product->discount_fee) * $product->quantity;
 
                 $products[] = $product;
@@ -122,6 +141,26 @@ class Index extends Component
         $this->discount = $discount;
 
         return $products;
+    }
+
+    public $tax;
+
+    public function calculateTax($amount)
+    {
+        if (!config('settings::tax_enabled')) {
+            if(!isset($this->tax)) $this->tax = new TaxRate();
+            return 0;
+        }
+        if (!$this->tax) {
+            if (!auth()->check()) {
+                $this->tax = TaxRate::where('country', 'all')->first();
+            } else {
+                $this->tax = TaxRate::whereIn('country', [auth()->user()->country, 'all'])->get()->sortBy(function ($taxRate) {
+                    return $taxRate->country == 'all';
+                })->first();
+            }
+        }
+        return $amount * ($this->tax->rate / 100);
     }
 
 
@@ -167,6 +206,11 @@ class Index extends Component
         if (!auth()->check()) {
             return redirect()->route('login');
         }
+        if (config('settings::requiredClientDetails_address') && !auth()->user()->address) return redirect()->route('clients.profile')->with(['error' => 'Please define your address.']);
+        if (config('settings::requiredClientDetails_city') && !auth()->user()->city) return redirect()->route('clients.profile')->with(['error' => 'Please define your city.']);
+        if (config('settings::requiredClientDetails_country') && !auth()->user()->city) return redirect()->route('clients.profile')->with(['error' => 'Please define your country.']);
+        if (config('settings::requiredClientDetails_phone') && !auth()->user()->phone) return redirect()->route('clients.profile')->with(['error' => 'Please define your phone number.']);
+
         if (config('settings::tos') == 1) {
             $this->validateOnly('tos', [
                 'tos' => 'required|accepted',
@@ -254,7 +298,8 @@ class Index extends Component
             $invoice->status = 'pending';
         }
         $invoice->order()->associate($order);
-        $invoice->save();
+        // As the ->total() isn't available for events yet, we trigger it manually
+        $invoice->saveQuietly();
         foreach ($products as $product) {
             if ($product->allow_quantity == 1)
                 for (
@@ -262,20 +307,23 @@ class Index extends Component
                     $i < $product->quantity;
                     ++$i
                 ) {
-                    $this->createOrderProduct($order, $product, $invoice, false);
+                    $orderProductCreated = $this->createOrderProduct($order, $product, $invoice, false);
                 }
             else if ($product->allow_quantity == 2)
-                $this->createOrderProduct($order, $product, $invoice);
+                $orderProductCreated = $this->createOrderProduct($order, $product, $invoice);
             else
-                $this->createOrderProduct($order, $product, $invoice);
+                $orderProductCreated = $this->createOrderProduct($order, $product, $invoice);
             if ($product->setup_fee > 0) {
                 $invoiceItem = new InvoiceItem();
                 $invoiceItem->invoice_id = $invoice->id;
                 $invoiceItem->description = $product->name . ' Setup Fee';
-                $invoiceItem->total = ($product->setup_fee - $product->discount_fee) * $product->quantity;
+                $invoiceItem->product_id = $orderProductCreated->id;
+                $invoiceItem->total = $product->setup_fee * $product->quantity;
                 $invoiceItem->save();
             }
         }
+        // Trigger event
+        event(new \App\Events\Invoice\InvoiceCreated($invoice));
 
         session()->forget('cart');
         session()->forget('coupon');
@@ -300,6 +348,12 @@ class Index extends Component
             $invoiceTotalAndProducts = $invoice->getItemsWithProducts();
             $products = $invoiceTotalAndProducts->products;
             $total = $invoiceTotalAndProducts->total;
+
+            if ($invoiceTotalAndProducts->tax->amount > 0 && config('settings::tax_type') == 'exclusive') {
+                foreach ($products as $product) {
+                    $product->price = $product->price + ($product->price * $invoiceTotalAndProducts->tax->rate / 100);
+                }
+            }
 
             if ($total == 0) {
                 $invoice->status = 'paid';
@@ -397,6 +451,8 @@ class Index extends Component
         $description = $orderProduct->billing_cycle ? '(' . now()->format('Y-m-d') . ' - ' . date('Y-m-d', strtotime($orderProduct->expiry_date)) . ')' : '';
         $invoiceProduct->description = $product->name . ' ' . $description;
         $invoiceProduct->save();
+
+        return $orderProduct;
     }
 
 

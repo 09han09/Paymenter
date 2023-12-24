@@ -12,7 +12,7 @@ class Pterodactyl extends Server
     {
         return [
             'display_name' => 'Pterodactyl',
-            'version' => '1.1.6',
+            'version' => '1.1.8',
             'author' => 'Paymenter',
             'website' => 'https://paymenter.org',
         ];
@@ -22,6 +22,9 @@ class Pterodactyl extends Server
     {
         $config = ExtensionHelper::getConfig('Pterodactyl', $key);
         if ($config) {
+            if ($key == 'host') {
+                return rtrim($config, '/');
+            }
             return $config;
         }
 
@@ -223,18 +226,6 @@ class Pterodactyl extends Server
         ];
     }
 
-    public function getUserConfig($options){
-        return [
-            [
-                'name' => 'hostname',
-                'type' => 'text',   
-                'friendlyName' => 'Hostname',
-                'description' => 'The hostname of the VM',
-                'validation' => 'required|domain',
-            ],
-        ];
-    }
-
     public function createServer($user, $params, $order, $orderProduct, $configurableOptions): bool
     {
         if ($this->serverExists($orderProduct->id)) {
@@ -284,11 +275,12 @@ class Pterodactyl extends Server
         $servername = $configurableOptions['servername'] ?? $params['servername'] ?? false;
         $servername = empty($servername) ? $orderProduct->product->name . ' #' . $orderProduct->id : $servername;
         $port_array = (object) $this->portArrays($port_array, $environment, $location, $node, $orderProduct);
+        $default = $port_array->default ?? null;
         $allocationed = $port_array->allocations ?? [];
         $environment = $port_array->environment ?? $environment;
 
         if ($node) {
-            $allocations = $this->getRequest($this->config('host') . '/api/application/nodes/' . $params['node'] . '/allocations');
+            $allocations = $this->getRequest($this->config('host') . '/api/application/nodes/' . $node . '/allocations');
             $allocations = $allocations->json();
             while (!isset($allocation)) {
                 foreach ($allocations['data'] as $key => $val) {
@@ -306,7 +298,7 @@ class Pterodactyl extends Server
                     $allocations = $allocations->json();
                 }
             }
-            error_log($allocation);
+
             $json = [
                 'name' => $servername,
                 'user' => (int) $this->getUser($user, $orderProduct),
@@ -327,7 +319,7 @@ class Pterodactyl extends Server
                     'backups' => (int) $backups,
                 ],
                 'allocation' => [
-                    'default' => (int) $allocation,
+                    'default' => isset($default) ? (int) $default : $allocation,
                     'additional' => $allocationed ?? [],
                 ],
                 'environment' => $environment,

@@ -15,14 +15,14 @@
                             <div class="mt-4">
                                 <h3>{{ __('Billing cycle') }}</h3>
 
-                                <div class="flex flex-row flex-wrap mb-4 gap-4">
+                                <div class="flex flex-row flex-wrap mt-2 mb-4 gap-4">
                                     @php $priceTypes = ['monthly', 'quarterly', 'semi_annually', 'annually', 'biennially', 'triennially']; @endphp
                                     @foreach ($priceTypes as $priceType)
                                         @if ($prices->{$priceType})
                                             <button type="button"
                                                 class="button button-secondary flex flex-col items-center p-4 px-5 ring-offset-primary-400 ring-primary-400 @if ($billing_cycle == $priceType) ring-2 @endif"
                                                 wire:click="setBillingCycle('{{ $priceType }}')">
-                                                <h3 class="text-lg">{{ ucfirst($priceType) }}</h3>
+                                                <h3 class="text-lg">{{ ucfirst($priceType == 'semi_annually' ? 'semi annually' : $priceType) }}</h3>
                                                 <x-money :amount="$prices->{$priceType}" /></h3>
                                                 @if($prices->{$priceType.'_setup'})
                                                     <div class="text-sm text-secondary-600">{{ __('Setup fee') }}: <x-money :amount="$prices->{$priceType.'_setup'}" /></div>
@@ -137,7 +137,7 @@
                                             </div>
                                         </div>
                                     @elseif($item->type == 'select')
-                                        <x-input type="{{ $item->type }}" placeholder="{{ ucfirst($item->name) }}"
+                                        <x-input type="{{ $item->type }}" placeholder="{{ ucfirst($name) }}"
                                             name="{{ $item->id }}" id="{{ $item->id }}"
                                             label="{{ ucfirst($name) }}" required
                                             wire:change="update({{ $item->id }}, $event.target.value)">
@@ -158,7 +158,7 @@
                                             @endforeach
                                         </x-input>
                                     @else
-                                        <x-input type="{{ $item->type }}" placeholder="{{ ucfirst($item->name) }}"
+                                        <x-input type="{{ $item->type }}" placeholder="{{ ucfirst($name) }}"
                                             name="{{ $item->id }}" id="{{ $item->id }}"
                                             value="{{ old($item->name) ?? $config[$item->id] }}"
                                             label="{{ ucfirst($name) }}" required
@@ -177,7 +177,7 @@
                 <h1 class="text-xl font-bold">{{ __('Order Summary') }}</h1>
                 <div class="mt-2">
                     <div class="flex flex-row justify-between">
-                        <div class="text-sm text-secondary-600">{{ __('Product') }}</div>
+                        <div class="text-sm text-secondary-600">{{ $product->name }}</div>
                         <div class="text-sm text-secondary-600">
                             <x-money :amount="$prices->{$billing_cycle}" />
                         </div>
@@ -210,9 +210,12 @@
                         @foreach ($configItems as $item)
                             <div class="flex flex-row justify-between ml-2">
                                 <div class="text-sm text-secondary-600">
-                                    {{ $item->name }}@if ($config[$item->id] && $item->type !== 'text'):
-                                        {{ $item->configurableOptionInputs->where('id', $config[$item->id])->first()->name }}
-                                    @elseif($config[$item->id]):
+                                    @php $name = explode('|', $item->name)[1] ?? $item->name; @endphp
+                                    {{ $name }}:
+                                    @if ($config[$item->id] && $item->type !== 'text')
+                                        @php $configName = explode('|', $item->configurableOptionInputs->where('id', $config[$item->id])->first()->name)[1] ?? $item->configurableOptionInputs->where('id', $config[$item->id])->first()->name; @endphp
+                                        {{ $configName }}
+                                    @elseif($config[$item->id])
                                         {{ $config[$item->id] }}
                                     @endif
                                 </div>
@@ -220,15 +223,15 @@
                                     @if ($item->type == 'quantity')
                                         x
                                         @if ($config[$item->id])
-                                            {{ $item->configurableOptionInputs->where('id', $config[$item->id])->first()->configurableOptionInputPrice->{$billing_cycle} }}
+                                            <x-money :amount="$item->configurableOptionInputs->where('id', $config[$item->id])->first()->configurableOptionInputPrice->{$billing_cycle}" />
                                         @else
-                                            {{ $item->configurableOptionInputs->first()->configurableOptionInputPrice->{$billing_cycle} }}
+                                            <x-money :amount="$item->configurableOptionInputs->first()->configurableOptionInputPrice->{$billing_cycle}" />
                                         @endif
                                     @else
                                         @if ($config[$item->id] && $item->type !== 'text')
-                                            {{ $item->configurableOptionInputs->where('id', $config[$item->id])->first()->configurableOptionInputPrice->{$billing_cycle} }}
+                                            <x-money :amount="$item->configurableOptionInputs->where('id', $config[$item->id])->first()->configurableOptionInputPrice->{$billing_cycle}" />
                                         @else
-                                            {{ $item->configurableOptionInputs->first()->configurableOptionInputPrice->{$billing_cycle} }}
+                                            <x-money :amount="$item->configurableOptionInputs->first()->configurableOptionInputPrice->{$billing_cycle}" />
                                         @endif
                                     @endif
                                 </div>

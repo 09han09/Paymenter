@@ -32,7 +32,7 @@
                     </path>
                 </svg>
             </button>
-            <div class="absolute hidden w-max origin-top-right bg-white rounded-md shadow-lg dark:bg-darkmode ring-1 ring-black ring-opacity-5 z-[1]"
+            <div class="absolute hidden w-max origin-top-right bg-white rounded-md shadow-lg dark:bg-darkmode ring-1 ring-black ring-opacity-5 z-20"
                 role="menu" aria-orientation="vertical" aria-labelledby="menu-button" tabindex="-1"
                 id="moreOptions">
                 <div class="py-1 grid grid-cols-1" role="none">
@@ -111,8 +111,13 @@
                         </div>
 
                         <div class="grid grid-cols-2 gap-4 mt-4">
-                            <x-input name="country" id="country" label="{{ __('Country') }}" type="text"
-                                value="{{ $user->country }}" />
+                            <x-input name="country" id="country" label="{{ __('Country') }}" type="select">
+                                @foreach (App\Classes\Constants::countries() as $key => $country)
+                                    <option value="{{ $key }}" @if ($user->country == $key) selected @endif>
+                                        {{ $country }}
+                                    </option>
+                                @endforeach
+                            </x-input>
 
                             <x-input name="zip" id="zip" label="{{ __('Zip') }}" type="text"
                                 value="{{ $user->zip }}" />

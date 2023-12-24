@@ -45,7 +45,7 @@
                                     <p>{{ config('settings::company_address') }}</p>
                                     <p>{{ config('settings::company_zip') }} {{ config('settings::company_city') }}</p>
                                     <p>{{ config('settings::company_country') }}</p>
-                                    <p>{{ config('settings::company_tin') ?__('TIN').":":null }} {{ config('settings::company_tin') }}</p>
+                                    <p>{{ config('settings::company_vat') ?__('VAT').":":null }} {{ config('settings::company_vat') }}</p>
                                 </div>
                                 <div class="dark:text-darkmodetext text-sm font-light text-slate-500">
                                     <p class="dark:text-darkmodetext text-sm font-bold text-slate-700">
@@ -150,6 +150,7 @@
                                     @endforeach
                                 </tbody>
                                 <tfoot>
+                                    @if($discount > 0)
                                     <tr>
                                         <th scope="row" colspan="3"
                                             class="hidden pt-6 pl-6 pr-3 text-sm font-light text-right text-slate-500 sm:table-cell md:pl-0">
@@ -163,6 +164,7 @@
                                             <x-money :amount="number_format((float) ($discount), 2, '.', '')" />
                                         </td>
                                     </tr>
+                                    @endif
                                     <!--
                                     can be enabled if this is made
                                     <tr>
@@ -195,21 +197,23 @@
                                             $0.00
                                         </td>
                                     </tr>
+                                -->
 
-
-                                    <tr>
-                                        <th scope="row" colspan="3"
-                                            class="hidden pt-4 pl-6 pr-3 text-sm font-light text-right text-slate-500 sm:table-cell md:pl-0">
-                                            Tax
-                                        </th>
-                                        <th scope="row"
-                                            class="pt-4 pl-4 pr-3 text-sm font-light text-left text-slate-500 sm:hidden">
-                                            Tax
-                                        </th>
-                                        <td class="pt-4 pl-3 pr-4 text-sm text-right text-slate-500 sm:pr-6 md:pr-0">
-                                            $0.00
-                                        </td>
-                                    </tr>-->
+                                    @if(config('settings::tax_enabled'))
+                                        <tr>
+                                            <th scope="row" colspan="3"
+                                                class="hidden pt-4 pl-6 pr-3 text-sm font-light text-right text-slate-500 sm:table-cell md:pl-0">
+                                                {{ $tax->name }}&#64;{{ $tax->rate }}%
+                                            </th>
+                                            <th scope="row"
+                                                class="pt-4 pl-4 pr-3 text-sm font-light text-left text-slate-500 sm:hidden">
+                                                {{ $tax->name }}&#64;{{ $tax->rate }}%
+                                            </th>
+                                            <td class="pt-4 pl-3 pr-4 text-sm text-right text-slate-500 sm:pr-6 md:pr-0">
+                                                <x-money :amount="$tax->amount" />
+                                            </td>
+                                        </tr>
+                                    @endif
                                     <tr>
                                         <th scope="row" colspan="3"
                                             class="dark:text-darkmodetext hidden pt-4 pl-6 pr-3 text-sm font-normal text-right text-slate-700 sm:table-cell md:pl-0">
@@ -244,7 +248,7 @@
                                                         {{__('Pay with credits')}}
                                                     </option>
                                                 @endif
-                                                @foreach (App\Models\Extension::where('type', 'gateway')->where('enabled', true)->get() as $gateway)
+                                                @foreach ($gateways as $gateway)
                                                     <option class="dark:bg-darkmode dark:text-darkmodetext"
                                                             value="{{ $gateway->id }}">
                                                         {{ isset($gateway->display_name) ? $gateway->display_name : $gateway->name }}

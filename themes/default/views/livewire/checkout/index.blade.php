@@ -75,7 +75,7 @@
                 <div class="content-box">
                     @if (empty($coupon))
                         <div class="flex flex-row items-start gap-x-2 place-content-stretch">
-                            <div class="flex flex-col">
+                            <div class="flex flex-col w-full">
                                 <x-input type="text" placeholder="{{ __('Coupon') }}" name="couponCode"
                                     wire:model="couponCode" icon="ri-coupon-2-line" class="w-full" />
                             </div>
@@ -97,13 +97,13 @@
                     <hr class="my-4 border-secondary-300">
                     @foreach ($this->products as $product)
                         @if ($product->price > 0)
-                            <span class="text-sm uppercase font-light text-gray-500 -mb-3">
+                            <span class=" -mb-3">
                                 {{ ucfirst($product->name) }}
                             </span>
-                            <div class="flex flex-row items-center justify-between -mt-1">
+                            <div class="flex flex-row items-center justify-between -mt-1 text-gray-500 text-sm">
                                 <div class="flex flex-row items-center">
                                     <span>
-                                        {{ ucfirst($product->billing_cycle) }}
+                                        {{ ucfirst($product->billing_cycle ?? 'One time') }}
                                     </span>
                                 </div>
                                 <div class="flex flex-col">
@@ -127,17 +127,13 @@
                             </div>
                         @endif
                         @if ($product->setup_fee > 0)
-                            <div class="flex flex-row items-center justify-between">
+                            <div class="flex flex-row items-center justify-between text-gray-500 text-sm">
                                 <div class="flex flex-row items-center">
-                                    <span class="text-lg">
-                                        {{ __('Setup fee') }}
-                                    </span>
+                                    {{ __('Setup fee') }}
                                 </div>
                                 <div class="flex flex-col">
-                                    <span class="text-lg">
-                                        {{ $quantity }}
-                                        <x-money :amount="$product->setup_fee - $product->discount_fee" />
-                                    </span>
+                                    {{ $quantity }}
+                                    <x-money :amount="$product->setup_fee - $product->discount_fee" />
                                 </div>
                             </div>
                         @endif
@@ -157,11 +153,30 @@
                             </div>
                         </div>
                     @endif
+                    <hr class="my-4 border-secondary-300">
+                    @if($tax->amount > 0)
+                        <div class="flex flex-row items-center justify-between mt-2">
+                            <div class="flex flex-row items-center">
+                                Subtotal
+                            </div>
+                            <div class="flex flex-col items-end">
+                                <x-money :amount="number_format($total-$tax->amount, 2)" />
+                            </div>
+                        </div>
+                        <div class="flex flex-row items-center justify-between mt-2">
+                            <div class="flex flex-row items-center">
+                                {{ $tax->name }}&#64;{{ $tax->rate }}%
+                            </div>
+                            <div class="flex flex-col items-end">
+                                <x-money :amount="$tax->amount" />
+                            </div>
+                        </div>
+                    @endif
                     <div class="flex flex-row items-center justify-between mt-2">
                         <div class="flex flex-row items-center">
                             <span class="text-lg font-bold">{{ __('Total Today') }}</span>
                         </div>
-                        <div class="flex flex-col">
+                        <div class="flex flex-col items-end">
                             <span class="text-lg font-bold">{{ config('settings::currency_sign') }}
                                 @if (!empty($discount))
                                     {{ number_format(round($total - $discount, 2), 2) }}
@@ -178,9 +193,9 @@
                             <label for="payment_method"
                                 class="text-sm text-secondary-600">{{ __('Payment method') }}</label>
                             <select id="payment_method" name="payment_method" autocomplete="payment_method"
-                                wire:model="payment_method"
+                                wire:model.live="payment_method"
                                 class="py-2 bg-secondary-200 text-secondary-800 font-medium rounded-md placeholder-secondary-500 outline-none w-full border focus:ring-2 focus:ring-offset-2 ring-offset-secondary-50 dark:ring-offset-secondary-100 duration-300 border-secondary-300 focus:border-secondary-400 focus:ring-primary-400">
-                                @foreach (App\Models\Extension::where('type', 'gateway')->where('enabled', true)->get() as $gateway)
+                                @foreach ($gateways as $gateway)
                                     <option value="{{ $gateway->id }}">
                                         {{ isset($gateway->display_name) ? $gateway->display_name : $gateway->name }}
                                     </option>
@@ -201,7 +216,15 @@
                         @endif
                         <div class="flex justify-end mt-4">
                             <button class="button button-primary" type="submit">
-                                {{ __('Checkout') }}
+                                <span wire:loading wire:target="pay">
+                                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="#9095A0" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                </span>
+                                <span wire:loading.remove wire:target="pay">
+                                    {{ __('Checkout') }}
+                                </span>
                             </button>
                         </div>
                     </form>

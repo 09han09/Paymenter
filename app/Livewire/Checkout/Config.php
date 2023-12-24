@@ -21,7 +21,7 @@ class Config extends Component
 
     public $prices;
 
-    public $total = 5.00;
+    public $total = 0;
 
     #[Url]
     public $config = [];
@@ -29,6 +29,12 @@ class Config extends Component
     public function mount($product)
     {
         $this->product = $product;
+        $this->calculate();
+    }
+
+    public function calculate()
+    {
+        $product = $this->product;
 
         $prices = $product->prices;
         $customConfig = $product->configurableGroups();
@@ -40,7 +46,7 @@ class Config extends Component
         $billing_cycles = ['monthly', 'quarterly', 'semi_annually', 'annually', 'biennially', 'triennially'];
 
         foreach ($billing_cycles as $cycle) {
-            if ($billing_cycle == $cycle && !$prices->$cycle) {
+            while ($billing_cycle == $cycle && !$prices->$cycle) {
                 $billing_cycle = next($billing_cycles) ?: 'monthly';
                 break;
             }
@@ -48,7 +54,7 @@ class Config extends Component
 
         $this->billing_cycle = $billing_cycle;
 
-        $this->userConfig = ExtensionHelper::getUserConfig($product);
+        $this->userConfig = empty($this->userConfig) ? ExtensionHelper::getUserConfig($product) : $this->userConfig;
         $this->customConfig = $customConfig;
         $this->prices = $prices;
 
@@ -64,12 +70,40 @@ class Config extends Component
                 }
             }
         }
+
+        foreach ($this->userConfig as $key => $config) {
+            // If its select, radio or slider, set the default value to the first option
+            if ($config->type == 'dropdown' || $config->type == 'radio' || $config->type == 'slider') {
+                $this->userConfig[$key]->value = $config->options[0]->value;
+            }
+        }
+
+        // Calculate total
+        $this->total = $prices->{$this->billing_cycle} ?? $prices->monthly;
+        $this->total += $prices->{$this->billing_cycle . '_setup'} ?? 0;
+        foreach ($customConfig as $group) {
+            foreach ($group->configurableOptions()->orderBy('order')->get() as $option) {
+                $configItemInput = $option->configurableOptionInputs()->get();
+                foreach ($configItemInput as $configItemInput) {
+                    if ($configItemInput->id != $this->config[$option->id] && ($option->type == 'select' || $option->type == 'radio' || $option->type == 'slider')) continue;
+                    $configItemPrice = $configItemInput->configurableOptionInputPrice;
+                    if ($configItemPrice) {
+                        if ($option->type == 'quantity') {
+                            $this->total += $configItemPrice->{$this->billing_cycle} * $this->config[$option->id];
+                        } else {
+                            $this->total += $configItemPrice->{$this->billing_cycle};
+                        }
+                    }
+                }
+            }
+        }
     }
 
 
     public function setBillingCycle($billing_cycle)
     {
         $this->billing_cycle = $billing_cycle;
+        $this->calculate();
     }
 
     public function update($item, $value, $userdConfig = false)
@@ -78,14 +112,15 @@ class Config extends Component
             // Check if item exists in userConfig
             $key = array_search($item, array_column($this->userConfig, 'name'));
             $this->userConfig[$key]->value = $value;
+            $this->calculate();
             return;
         }
         $this->config[$item] = $value;
+        $this->calculate();
     }
 
     public function checkout()
     {
-        $server = $this->product->extension;
         $prices = $this->product->prices;
         $userConfig = ExtensionHelper::getUserConfig($this->product);
 
@@ -95,13 +130,13 @@ class Config extends Component
         $config = [];
         foreach ($userConfig as $uconfig) {
             $key = array_search($uconfig->name, array_column($this->userConfig, 'name'));
-            
+
             $this->validateConfigItem($uconfig, $this->userConfig[$key]->value);
             $config[$uconfig->name] = $this->userConfig[$key]->value;
         }
 
         $product['config'] = $config;
-
+        $product['setup_fee'] = 0;
         if ($prices->type == 'recurring') {
             $product['price'] = $prices->{$this->billing_cycle} ?? $prices->monthly;
             $product['billing_cycle'] = $this->billing_cycle;
@@ -147,7 +182,7 @@ class Config extends Component
         $product['product_id'] = $this->product->id;
         $product['quantity'] = 1;
 
-        
+
         // Add to cart
         $cart = session()->get('cart', []);
         $cart[] = $product;
