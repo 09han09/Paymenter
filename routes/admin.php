@@ -62,6 +62,7 @@ Route::group(['prefix' => 'admin', 'middleware' => 'permission:ADMINISTRATOR'], 
         Route::post('/download', [App\Http\Controllers\Admin\ExtensionController::class, 'download'])->middleware(['password.confirm', 'permission:EDIT_EXTENSIONS'])->name('admin.extensions.download');
         Route::get('/edit/{sort}/{name}', [App\Http\Controllers\Admin\ExtensionController::class, 'edit'])->middleware(['password.confirm', 'permission:VIEW_EXTENSIONS'])->name('admin.extensions.edit');
         Route::post('/edit/{sort}/{name}', [App\Http\Controllers\Admin\ExtensionController::class, 'update'])->middleware(['password.confirm', 'permission:EDIT_EXTENSIONS'])->name('admin.extensions.update');
+        Route::post('/update/{extension}', [App\Http\Controllers\Admin\ExtensionController::class, 'updateExtension'])->middleware(['password.confirm', 'permission:EDIT_EXTENSIONS'])->name('admin.extensions.updateExtension');
     });
 
     Route::group(['prefix' => 'clients'], function () {
@@ -152,7 +153,11 @@ Route::group(['prefix' => 'admin', 'middleware' => 'permission:ADMINISTRATOR'], 
     Route::group(['prefix' => 'taxes'], function() {
         Route::get('/', [App\Http\Controllers\Admin\TaxController::class, 'index'])->middleware(['permission:VIEW_TAXES'])->name('admin.taxes');
         Route::post('/', [App\Http\Controllers\Admin\TaxController::class, 'update'])->middleware(['permission:EDIT_TAXES'])->name('admin.taxes.update');
-
         Route::post('/create', [App\Http\Controllers\Admin\TaxController::class, 'store'])->middleware(['permission:CREATE_TAXES'])->name('admin.taxes.create');
     }); 
+
+    Route::group(['prefix' => 'logs'], function() {
+        Route::get('/', [App\Http\Controllers\Admin\LogController::class, 'index'])->middleware(['permission:VIEW_LOGS'])->name('admin.logs');
+        Route::post('/debug', [App\Http\Controllers\Admin\LogController::class, 'debug'])->middleware(['permission:VIEW_LOGS'])->name('admin.logs.debug');
+    });
 });

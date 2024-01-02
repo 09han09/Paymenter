@@ -1,5 +1,5 @@
 # Stage 1 - Builder
-FROM        --platform=$TARGETOS/$TARGETARCH registry.access.redhat.com/ubi9/nodejs-18-minimal AS builder
+FROM       --platform=$TARGETOS/$TARGETARCH registry.access.redhat.com/ubi9/nodejs-18-minimal AS builder
 
 USER        0
 
@@ -9,7 +9,6 @@ COPY        --chown=1001:0 public ./public
 COPY        --chown=1001:0 themes ./themes
 COPY        --chown=1001:0 package.json .
 COPY        --chown=1001:0 vite.js .
-
 
 USER        1001
 
@@ -44,9 +43,26 @@ RUN         microdnf update -y \
     && microdnf remove -y tar wget \
     && microdnf clean all
 
+USER        caddy
+ENV         USER=caddy
+
+RUN         composer install --no-dev --optimize-autoloader \
+    && rm -rf bootstrap/cache/*.php \
+    && rm -rf storage/logs/*.log
+
+
+# Nodejs
+FROM builder
+
+USER       0
+
+RUN /usr/bin/npm install \
+    && /usr/bin/npm run build \
+    && rm -rf resources/scripts package.json node_modules
+
 COPY        --chown=caddy:caddy --from=builder /var/www/paymenter /var/www/paymenter
 
-WORKDIR     /var/www/paymenter
+USER        1001
 
 RUN         mkdir -p /tmp/paymenter/cache /tmp/paymenter/framework/{cache,sessions,views} storage/framework \
     && rm -rf bootstrap/cache storage/framework/sessions storage/framework/views storage/framework/cache \
@@ -56,23 +72,6 @@ RUN         mkdir -p /tmp/paymenter/cache /tmp/paymenter/framework/{cache,sessio
     && ln -s /tmp/paymenter/framework/views /var/www/paymenter/storage/framework/views \
     && chmod -R 755 /var/www/paymenter/storage/* /tmp/paymenter/cache \
     && chown -R caddy:caddy /var/www/paymenter /tmp/paymenter/{cache,framework}
-
-USER        caddy
-ENV         USER=caddy
-
-RUN         composer install --no-dev --optimize-autoloader \
-    && rm -rf bootstrap/cache/*.php \
-    && rm -rf storage/logs/*.log
-
-FROM builder
-
-USER       0
-
-
-# Nodejs
-RUN /usr/bin/npm install \
-    && /usr/bin/npm run build \
-    && rm -rf resources/scripts package.json node_modules
 
 USER       caddy
 
