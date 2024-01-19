@@ -93,7 +93,7 @@ class ClientController extends Controller
     public function products(User $user, OrderProduct $orderProduct = null)
     {
         if (!$orderProduct) {
-            $orderProduct = $user->orderProducts()->with(['product', 'invoices.items.product.order.coupon', 'invoices.items.product.product'])->first();
+            $orderProduct = $user->orderProducts()->with(['product'])->first();
             if (!$orderProduct) {
                 return redirect()->route('admin.clients.edit', $user->id)->with('error', 'No orders found');
             }
@@ -135,7 +135,7 @@ class ClientController extends Controller
     public function changeProductStatus(User $user, OrderProduct $orderProduct, Request $request): \Illuminate\Http\RedirectResponse
     {
         $request->validate([
-            'status' => 'required|in:create,suspend,unsuspend,terminate',
+            'status' => 'required|in:create,suspend,unsuspend,terminate,upgrade',
         ]);
 
         switch ($request->input('status')) {
@@ -150,6 +150,9 @@ class ClientController extends Controller
                 break;
             case 'terminate':
                 ExtensionHelper::terminateServer($orderProduct);
+                break;
+            case 'upgrade':
+                ExtensionHelper::upgradeServer($orderProduct);
                 break;
         }
 

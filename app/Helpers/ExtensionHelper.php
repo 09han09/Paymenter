@@ -4,6 +4,7 @@ namespace App\Helpers;
 
 use App\Jobs\Servers\CreateServer;
 use App\Jobs\Servers\UnsuspendServer;
+use App\Jobs\Servers\UpgradeServer;
 use App\Models\ConfigurableOption;
 use App\Models\ConfigurableOptionInput;
 use App\Models\User;
@@ -31,9 +32,12 @@ class ExtensionHelper
      *
      * @return void
      */
-    public static function paymentDone($id, $paymentMethod = 'manual', $paymentReference = null)
+    public static function paymentDone($id, $paymentMethod = 'unknown', $paymentReference = null)
     {
         $invoice = Invoice::findOrFail($id);
+        if ($invoice->status == 'paid') {
+            return;
+        }
         $user = User::findOrFail($invoice->user_id);
 
         if ($invoice->credits > 0) {
@@ -50,6 +54,20 @@ class ExtensionHelper
         $invoice->paid_reference = $paymentReference;
         $invoice->paid_at = now();
         $invoice->save();
+
+        if ($invoice->upgrade()->exists()) {
+            $upgrade = $invoice->upgrade;
+            $product = $upgrade->product;
+            $orderProduct = $upgrade->orderProduct;
+            $orderProduct->product_id = $product->id;
+            $orderProduct->price -= $orderProduct->product->price($orderProduct->billing_cycle);
+            $orderProduct->price += $product->price($orderProduct->billing_cycle);
+            $orderProduct->save();
+
+            UpgradeServer::dispatch($orderProduct);
+
+            return;
+        }
 
         foreach ($invoice->items()->get() as $item) {
             $product = $item->product()->get()->first();
@@ -663,6 +681,34 @@ class ExtensionHelper
 
         try {
             $module->terminateServer($user, $config, $order, $product2, $configurableOptions);
+        } catch (\Exception $e) {
+            self::error($extension->name, 'Error when terminating server: ' . $e->getMessage() . ' on line ' . $e->getLine() . ' in file ' . $e->getFile(), $e->getTraceAsString());
+        }
+    }
+
+    public static function upgradeServer(OrderProduct $product2)
+    {
+        $order = $product2->order()->first();
+
+        $product = Product::findOrFail($product2->product_id);
+        if (!isset($product->extension_id)) {
+            return;
+        }
+        $extension = $product->extension;
+        if (!$extension) {
+            return false;
+        }
+        $module = 'App\Extensions\\Servers\\' . $extension->name . '\\' . $extension->name;
+        if (!class_exists($module)) {
+            return false;
+        }
+        $module = new $module($extension);
+        $config = self::loadConfiguration($product, $product2);
+        $configurableOptions = self::loadConfigurableOptions($product2);
+        $user = $order->user;
+
+        try {
+            $module->upgradeServer($user, $config, $order, $product2, $configurableOptions);
         } catch (\Exception $e) {
             self::error($extension->name, 'Error when terminating server: ' . $e->getMessage() . ' on line ' . $e->getLine() . ' in file ' . $e->getFile(), $e->getTraceAsString());
         }

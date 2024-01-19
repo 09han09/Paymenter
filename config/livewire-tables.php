@@ -28,12 +28,12 @@ return [
     /**
      * Enable Blade Directives (Not required if automatically injecting or using bundler approaches)
      */
-    'enable_blade_directives ' => false,
+    'enable_blade_directives' => true,
 
     /**
      * Customise Script & Styles Paths
      */
-    'script_base_path' => '/rappasoft/laravel-livewire-tables',
+    'script_base_path' => '/paymenter/tables',
 
     /**
      * Filter Default Configuration Options

@@ -26,7 +26,8 @@ class Index extends DataTableComponent
 
     public function configure(): void
     {
-        $this->setPrimaryKey('id')->setTableRowUrl(fn ($row) => route('admin.orders.show', $row));
+        $this->setPrimaryKey('id')->setTableRowUrl(fn ($row) => route('admin.orders.show', $row))
+        ->setDefaultSort('id', 'desc');
     }
 
     public function deleteOrders(): void
@@ -53,16 +54,16 @@ class Index extends DataTableComponent
     {
         return [
             Column::make('ID', 'id')
-                ->sortable(),
+                ->sortable()->searchable(),
             Column::make('User', 'user.first_name')
-                ->sortable(),
+                ->sortable()->searchable(),
             ComponentColumn::make('Total', 'id')
                 ->component('money')
                 ->attributes(fn ($_, $row) => [
                     'amount' => $row->total(),
                 ]),
             Column::make('Created At', 'created_at')
-                ->sortable(),
+                ->sortable()->searchable(),
 
         ];
     }

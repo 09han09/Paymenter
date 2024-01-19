@@ -89,6 +89,7 @@ class ProductController extends Controller
             'image' => 'image|mimes:jpeg,png,jpg,gif,svg|max:5242',
             'stock' => 'integer|required_if:stock_enabled,true',
             'stock_enabled' => 'boolean',
+            'hidden' => 'boolean',
         ]);
 
         if ($request->hasFile('image') && !$request->get('no_image')) {
@@ -103,6 +104,7 @@ class ProductController extends Controller
             }
         }
         $product->stock_enabled = $request->get('stock_enabled') ?? false;
+        $product->hidden = $request->get('hidden') ?? false;
 
         if ($request->get('no_image')) {
             $data['image'] = 'null';
@@ -115,7 +117,7 @@ class ProductController extends Controller
     public function destroy(Product $product): \Illuminate\Http\RedirectResponse
     {
         OrderProduct::where('product_id', $product->id)->delete();
-        $product->prices->delete();
+        ProductPrice::where('product_id', $product->id)->delete();
         $product->delete();
 
         return redirect()->route('admin.products')->with('success', 'Product deleted successfully');
@@ -304,21 +306,9 @@ class ProductController extends Controller
         $server = Extension::where('name', $json->server)->first();
         if (!$server)
             return redirect()->route('admin.products.extension', $product->id)->with('error', 'Invalid server');
-        if (!file_exists(base_path('app/Extensions/Servers/' . $server->name . '/index.php'))) {
-            $server = null;
-            $extension = null;
-
-            return redirect()->route('admin.products.extension', $product->id)->with('error', 'Extension not found');
-        }
         if ($product->extension_id != $server->id)
             $product->update(['extension_id' => $server->id]);
-
-        include_once base_path('app/Extensions/Servers/' . $server->name . '/index.php');
-        $extension = new \stdClass();
-        $function = $server->name . '_getProductConfig';
-        $extension2 = json_decode(json_encode($function()));
-        $extension->productConfig = $extension2;
-        $extension->name = $server->name;
+        
         if (!$json) {
             return redirect()->route('admin.products.extension', $product->id)->with('error', 'Invalid JSON');
         }
@@ -331,8 +321,9 @@ class ProductController extends Controller
 
         // Delete all product settings
         ProductSetting::where('product_id', $product->id)->delete();
+        $econfig = ExtensionHelper::getProductConfiguration($product);
 
-        foreach ($extension->productConfig as $config) {
+        foreach ($econfig as $config) {
             if (isset($json->config->{$config->name})) {
                 ProductSetting::updateOrCreate(
                     [
@@ -374,5 +365,45 @@ class ProductController extends Controller
         }
 
         return redirect()->route('admin.products.edit', $newProduct->id)->with('success', 'Product duplicated successfully');
+    }
+
+    public function upgrade(Product $product)
+    {
+        $products = Product::where('id', '!=', $product->id)->get();
+
+        return view('admin.products.upgrade', compact('product', 'products'));
+    }
+
+    public function upgradeUpdate(Request $request, Product $product)
+    {
+        $request->validate([
+            'upgrades' => 'array',
+            'upgrade_configurable_options' => 'boolean'
+        ]);
+
+        $product->update([
+            'upgrade_configurable_options' => $request->get('upgrade_configurable_options', 0),
+        ]);
+
+        foreach ($product->upgrades as $upgrade) {
+            if (!in_array($upgrade->upgrade_product_id, $request->get('upgrades', []))) {
+                $upgrade->delete();
+            }
+        }
+
+        foreach ($request->get('upgrades', []) as $upgrade) {
+            $product->upgrades()->updateOrCreate(
+                [
+                    'product_id' => $product->id,
+                    'upgrade_product_id' => $upgrade,
+                ],
+                [
+                    'product_id' => $product->id,
+                    'upgrade_product_id' => $upgrade,
+                ]
+            );
+        }
+
+        return redirect()->route('admin.products.upgrade', $product->id)->with('success', 'Product upgrades updated successfully');
     }
 }

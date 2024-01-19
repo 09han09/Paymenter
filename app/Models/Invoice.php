@@ -52,6 +52,11 @@ class Invoice extends Model
         return $this->getItemsWithProducts()->total;
     }
 
+    public function upgrade()
+    {
+        return $this->hasOne(OrderProductUpgrade::class, 'invoice_id', 'id');
+    }
+
     public function items()
     {
         return $this->hasMany(InvoiceItem::class, 'invoice_id', 'id');
@@ -147,10 +152,9 @@ class Invoice extends Model
                 return $taxRate->country == 'all';
             })->first();
         }
-        if ($taxrate) {
-            $tax = $total * ($taxrate->rate / 100);
-        }
-        $taxrate->amount = $tax;
+        if(!$taxrate) return new TaxRate();
+        
+        $taxrate->amount = $total * ($taxrate->rate / 100);
         return $taxrate;
     }
 }
